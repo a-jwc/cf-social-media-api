@@ -146,6 +146,7 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
                 "GET,HEAD,POST,OPTIONS",
             )?;
             Headers::set(headers, "Access-Control-Allow-Headers", "Content-Type")?;
+            Headers::set(headers, "Allow", "GET,HEAD,POST,OPTIONS")?;
             Ok(res)
         })
         .run(req, env)
