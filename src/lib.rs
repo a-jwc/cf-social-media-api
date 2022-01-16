@@ -149,6 +149,12 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
             Headers::set(headers, "Allow", "GET,HEAD,POST,OPTIONS")?;
             Ok(res)
         })
+        .options_async("/posts", |_, _| async {
+            let mut res = Response::ok("success")?;
+            let headers = Response::headers_mut(&mut res);
+            Headers::set(headers, "Access-Control-Allow-Origin", "*")?;
+            Ok(res)
+        })
         .run(req, env)
         .await
 }
