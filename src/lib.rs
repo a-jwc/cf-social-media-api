@@ -97,8 +97,6 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
             let mut posts: Vec<Value> = vec![];
             for key in keys {
                 let mut value = kv.get(&key.name).await.unwrap().unwrap().as_string();
-                value.pop();
-                value.remove(0);
                 let j = json!(value);
                 posts.push(j);
             }
@@ -131,12 +129,11 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
                 Some(n) => n.as_string(),
                 None => name_not_found.to_string(),
             };
-            // console_log!("kv_value {}", kv_value);
-            new_post_string = "[".to_string() + &new_post_string + &"]".to_string();
+            // new_post_string = "[".to_string() + &new_post_string + &"]".to_string();
             kv.put(&(new_post_name + "-" + &now), &new_post_string)?
                 .execute()
                 .await?;
-            // Response::ok(format!("{}", new_post));
+
             let mut res = Response::ok(format!("{}", new_post))?;
             let headers = Response::headers_mut(&mut res);
             Headers::set(headers, "Access-Control-Allow-Origin", "*")?;
@@ -153,6 +150,35 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
             let mut res = Response::ok("success")?;
             let headers = Response::headers_mut(&mut res);
             Headers::set(headers, "Access-Control-Allow-Origin", "*")?;
+            Ok(res)
+        })
+        .post_async("/updatelikes", |mut req, ctx| async move {
+            // get value <username>-<time>
+            let mut new_post: Value = req.json::<serde_json::Value>().await?;
+            let kv = ctx.kv("my-app-general_posts_preview")?;
+            let new_post_obj = new_post.as_object_mut().unwrap();
+            let mut username = new_post_obj.get("username").unwrap().to_string();
+            username.pop();
+            username.remove(0);
+            let mut time = new_post_obj.get("time").unwrap().to_string();
+            time.pop();
+            time.remove(0);
+            let key = username
+                + "-"
+                + &time;
+            kv.delete(&key).await?;
+            let new_post_string = new_post.to_string();
+            kv.put(&key, new_post_string)?.execute().await?;
+            let mut res = Response::ok(format!("{}", new_post))?;
+            let headers = Response::headers_mut(&mut res);
+            Headers::set(headers, "Access-Control-Allow-Origin", "*")?;
+            Headers::set(
+                headers,
+                "Access-Control-Allow-Methods",
+                "GET,HEAD,POST,OPTIONS",
+            )?;
+            Headers::set(headers, "Access-Control-Allow-Headers", "Content-Type")?;
+            Headers::set(headers, "Allow", "GET,HEAD,POST,OPTIONS")?;
             Ok(res)
         })
         .run(req, env)
