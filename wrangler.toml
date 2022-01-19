@@ -5,7 +5,8 @@ compatibility_date = "2022-01-10"
 account_id = "d86beb4caa95053d79b255ab6ecfaa70"
 
 kv_namespaces = [
-  { binding = "my-app-general_posts_preview", preview_id = "5ffc9d91ae3141628fa3fe4f31abc2de", id = "bbd0d04c7a70463f8db9a13079e19be2" }
+  { binding = "my-app-general_posts_preview", preview_id = "5ffc9d91ae3141628fa3fe4f31abc2de", id = "bbd0d04c7a70463f8db9a13079e19be2" },
+  { binding = "users", preview_id = "7c38ddc080e04713be9b181a8c5fedea", id = "d1668f9f796c4c698d4aba234dce96fe" },
 ]
 
 [vars]
