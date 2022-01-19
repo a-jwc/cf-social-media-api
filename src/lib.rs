@@ -113,7 +113,6 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
             let mut new_post: Value = req.json::<serde_json::Value>().await?;
             let now = Utc::now().to_rfc3339().to_string();
             if let Some(new_post_obj) = new_post.as_object_mut() {
-                console_log!("{:#?}", new_post_obj);
                 new_post_obj.insert("time".to_string(), serde_json::Value::String(now.clone()));
             }
             let name_not_found = "name not found".to_string();
@@ -121,16 +120,15 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
                 Some(n) => n.to_string(),
                 None => name_not_found.to_string(),
             };
-            let mut new_post_string = new_post.to_string();
+            let new_post_string = new_post.to_string();
             let kv = ctx.kv("my-app-general_posts_preview")?;
             new_post_name.pop();
             new_post_name.remove(0);
-            let mut kv_value = match kv.get(&new_post_name).await? {
+            let kv_value = match kv.get(&new_post_name).await? {
                 Some(n) => n.as_string(),
                 None => name_not_found.to_string(),
             };
-            // new_post_string = "[".to_string() + &new_post_string + &"]".to_string();
-            kv.put(&(new_post_name + "-" + &now), &new_post_string)?
+            kv.put(&(now + "-" + &new_post_name), &new_post_string)?
                 .execute()
                 .await?;
 
@@ -163,9 +161,7 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
             let mut time = new_post_obj.get("time").unwrap().to_string();
             time.pop();
             time.remove(0);
-            let key = username
-                + "-"
-                + &time;
+            let key = time + "-" + &username;
             kv.delete(&key).await?;
             let new_post_string = new_post.to_string();
             kv.put(&key, new_post_string)?.execute().await?;
