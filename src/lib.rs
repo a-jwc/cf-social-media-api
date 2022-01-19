@@ -177,6 +177,45 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
             Headers::set(headers, "Allow", "GET,HEAD,POST,OPTIONS")?;
             Ok(res)
         })
+        .get_async("/users", |_, ctx| async move {
+            let kv = ctx.kv("users")?;
+            let keys = kv.list().execute().await?.keys;
+            let mut users = vec![];
+            for key in keys {
+                // let mut value = kv.get(&key.name).await.unwrap().unwrap().as_string();
+                // let j = json!(value);
+                users.push(key.name);
+            }
+            console_log!("{:#?}", users);
+            let mut res = Response::from_json(&users)?;
+            let headers = Response::headers_mut(&mut res);
+            Headers::set(headers, "Access-Control-Allow-Origin", "*")?;
+            Headers::set(headers, "transfer-encoding", "chunked")?;
+            Headers::set(headers, "vary", "Accept-Encoding")?;
+            Headers::set(headers, "connection", "keep-alive")?;
+            Ok(res)
+        })
+        .post_async("/users", |mut req, ctx| async move {
+            let mut new_user: Value = req.json::<serde_json::Value>().await?;
+            let now = Utc::now().to_rfc3339().to_string();
+            let new_user_obj = new_user.as_object_mut().unwrap();
+            let mut username = new_user_obj.get("username").unwrap().to_string();
+            username.pop();
+            username.remove(0);
+            let kv = ctx.kv("users")?;
+            kv.put(&username, &now)?.execute().await?;
+            let mut res = Response::ok(format!("{}", new_user))?;
+            let headers = Response::headers_mut(&mut res);
+            Headers::set(headers, "Access-Control-Allow-Origin", "*")?;
+            Headers::set(
+                headers,
+                "Access-Control-Allow-Methods",
+                "GET,HEAD,POST,OPTIONS",
+            )?;
+            Headers::set(headers, "Access-Control-Allow-Headers", "Content-Type")?;
+            Headers::set(headers, "Allow", "GET,HEAD,POST,OPTIONS")?;
+            Ok(res)
+        })
         .run(req, env)
         .await
 }
