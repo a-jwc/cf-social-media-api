@@ -103,7 +103,12 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
             console_log!("{:#?}", posts);
             let mut res = Response::from_json(&posts)?;
             let headers = Response::headers_mut(&mut res);
-            Headers::set(headers, "Access-Control-Allow-Origin", "*")?;
+            Headers::set(
+                headers,
+                "Access-Control-Allow-Origin",
+                "https://cf-social-media-frontend.pages.dev",
+            )?;
+            Headers::set(headers, "Access-Control-Allow-Credentials", "true")?;
             Headers::set(headers, "transfer-encoding", "chunked")?;
             Headers::set(headers, "vary", "Accept-Encoding")?;
             Headers::set(headers, "connection", "keep-alive")?;
@@ -112,42 +117,80 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
         .post_async("/posts", |mut req, ctx| async move {
             let mut new_post: Value = req.json::<serde_json::Value>().await?;
             let now = Utc::now().to_rfc3339().to_string();
-            if let Some(new_post_obj) = new_post.as_object_mut() {
-                new_post_obj.insert("time".to_string(), serde_json::Value::String(now.clone()));
-            }
-            let name_not_found = "name not found".to_string();
-            let mut new_post_name = match new_post.get("username") {
+            let req_cookie = req.headers().get("set-cookie")?.unwrap_or("".to_string());
+            let name_not_found = "".to_string();
+            *new_post.get_mut("time").unwrap() = serde_json::Value::String(now.clone());
+            // if let Some(new_post_obj) = new_post.as_object_mut() {
+            let mut username = match new_post.get("username") {
                 Some(n) => n.to_string(),
                 None => name_not_found.to_string(),
             };
+
+            // * Remove double quotes from name
+            username.pop();
+            username.remove(0);
+            if req_cookie.len() > 0 {
+                let auth_resp =
+                    reqwest::get("https://ricky-division-score-chain.trycloudflare.com/verify")
+                        .await
+                        .unwrap();
+                let resp_body = auth_resp.text().await.unwrap();
+                if resp_body != username {
+                    return Response::error("Could not verify user", 400);
+                }
+            }
+
+            // * Get the set-cookie header from authorization server
+            let auth_resp = reqwest::get(format!(
+                "https://ricky-division-score-chain.trycloudflare.com/auth/{}",
+                username
+            ))
+            .await
+            .unwrap();
+            let auth_resp_headers = auth_resp.headers();
+            let set_cookie_header = auth_resp_headers
+                .get("set-cookie")
+                .unwrap()
+                .to_str()
+                .unwrap();
+
             let new_post_string = new_post.to_string();
+
+            // * Add post to kv
             let kv = ctx.kv("my-app-general_posts_preview")?;
-            new_post_name.pop();
-            new_post_name.remove(0);
-            let kv_value = match kv.get(&new_post_name).await? {
-                Some(n) => n.as_string(),
-                None => name_not_found.to_string(),
-            };
-            kv.put(&(now + "-" + &new_post_name), &new_post_string)?
+            kv.put(&(now + "-" + &username), &new_post_string)?
                 .execute()
                 .await?;
 
+            // * Set response
             let mut res = Response::ok(format!("{}", new_post))?;
             let headers = Response::headers_mut(&mut res);
-            Headers::set(headers, "Access-Control-Allow-Origin", "*")?;
+            Headers::set(
+                headers,
+                "Access-Control-Allow-Origin",
+                "https://cf-social-media-frontend.pages.dev",
+            )?;
+            Headers::set(headers, "Access-Control-Allow-Credentials", "true")?;
             Headers::set(
                 headers,
                 "Access-Control-Allow-Methods",
                 "GET,HEAD,POST,OPTIONS",
             )?;
             Headers::set(headers, "Access-Control-Allow-Headers", "Content-Type")?;
-            Headers::set(headers, "Allow", "GET,HEAD,POST,OPTIONS")?;
+            Headers::set(headers, "Set-Cookie", set_cookie_header)?;
             Ok(res)
+            // } else {
+            //     Response::error("Post not made", 400)
+            // }
         })
         .options_async("/posts", |_, _| async {
             let mut res = Response::ok("success")?;
             let headers = Response::headers_mut(&mut res);
-            Headers::set(headers, "Access-Control-Allow-Origin", "*")?;
+            Headers::set(
+                headers,
+                "Access-Control-Allow-Origin",
+                "https://cf-social-media-frontend.pages.dev",
+            )?;
             Ok(res)
         })
         .post_async("/updatelikes", |mut req, ctx| async move {
@@ -167,14 +210,17 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
             kv.put(&key, new_post_string)?.execute().await?;
             let mut res = Response::ok(format!("{}", new_post))?;
             let headers = Response::headers_mut(&mut res);
-            Headers::set(headers, "Access-Control-Allow-Origin", "*")?;
+            Headers::set(
+                headers,
+                "Access-Control-Allow-Origin",
+                "https://cf-social-media-frontend.pages.dev",
+            )?;
             Headers::set(
                 headers,
                 "Access-Control-Allow-Methods",
                 "GET,HEAD,POST,OPTIONS",
             )?;
             Headers::set(headers, "Access-Control-Allow-Headers", "Content-Type")?;
-            Headers::set(headers, "Allow", "GET,HEAD,POST,OPTIONS")?;
             Ok(res)
         })
         .get_async("/users", |_, ctx| async move {
@@ -189,7 +235,11 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
             console_log!("{:#?}", users);
             let mut res = Response::from_json(&users)?;
             let headers = Response::headers_mut(&mut res);
-            Headers::set(headers, "Access-Control-Allow-Origin", "*")?;
+            Headers::set(
+                headers,
+                "Access-Control-Allow-Origin",
+                "https://cf-social-media-frontend.pages.dev",
+            )?;
             Headers::set(headers, "transfer-encoding", "chunked")?;
             Headers::set(headers, "vary", "Accept-Encoding")?;
             Headers::set(headers, "connection", "keep-alive")?;
@@ -206,7 +256,11 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
             kv.put(&username, &now)?.execute().await?;
             let mut res = Response::ok(format!("{}", new_user))?;
             let headers = Response::headers_mut(&mut res);
-            Headers::set(headers, "Access-Control-Allow-Origin", "*")?;
+            Headers::set(
+                headers,
+                "Access-Control-Allow-Origin",
+                "https://cf-social-media-frontend.pages.dev",
+            )?;
             Headers::set(
                 headers,
                 "Access-Control-Allow-Methods",
