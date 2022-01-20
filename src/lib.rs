@@ -120,7 +120,6 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
             let req_cookie = req.headers().get("set-cookie")?.unwrap_or("".to_string());
             let name_not_found = "".to_string();
             *new_post.get_mut("time").unwrap() = serde_json::Value::String(now.clone());
-            // if let Some(new_post_obj) = new_post.as_object_mut() {
             let mut username = match new_post.get("username") {
                 Some(n) => n.to_string(),
                 None => name_not_found.to_string(),
@@ -129,6 +128,7 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
             // * Remove double quotes from name
             username.pop();
             username.remove(0);
+
             if req_cookie.len() > 0 {
                 let auth_resp =
                     reqwest::get("https://ricky-division-score-chain.trycloudflare.com/verify")
@@ -179,9 +179,6 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
             Headers::set(headers, "Access-Control-Allow-Headers", "Content-Type")?;
             Headers::set(headers, "Set-Cookie", set_cookie_header)?;
             Ok(res)
-            // } else {
-            //     Response::error("Post not made", 400)
-            // }
         })
         .options_async("/posts", |_, _| async {
             let mut res = Response::ok("success")?;
