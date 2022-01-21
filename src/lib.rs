@@ -1,4 +1,5 @@
 use chrono::{Datelike, Timelike, Utc};
+use reqwest::header::COOKIE;
 use serde::*;
 use serde_json::{json, Value};
 use std::fmt;
@@ -66,21 +67,6 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
         }
     }
 
-    // static POSTS: [Post; 2] = [
-    //     Post {
-    //         title: "My First Post",
-    //         username: "coolguy123",
-    //         content: "Hey Y'all!",
-    //     },
-    //     Post {
-    //         title: "Story About my Dogs",
-    //         username: "kn0thing",
-    //         content: "So the other day I was in the yard, and then I left.",
-    //     },
-    // ];
-
-    // general_posts.put("posts", POSTS);
-
     // Add as many routes as your Worker needs! Each route will get a `Request` for handling HTTP
     // functionality and a `RouteContext` which you can use to  and get route parameters and
     // Environment bindings like KV Stores, Durable Objects, Secrets, and Variables.
@@ -132,42 +118,57 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
         .post_async("/posts", |mut req, ctx| async move {
             let mut new_post: Value = req.json::<serde_json::Value>().await?;
             let now = Utc::now().to_rfc3339().to_string();
-            let req_cookie = req.headers().get("set-cookie")?.unwrap_or("".to_string());
+            let req_cookie = req.headers().get("Cookie")?.unwrap_or("".to_string());
             let name_not_found = "".to_string();
             *new_post.get_mut("time").unwrap() = serde_json::Value::String(now.clone());
+
+            // * Get username and remove double quotes from name
             let mut username = match new_post.get("username") {
                 Some(n) => n.to_string(),
                 None => name_not_found.to_string(),
             };
-
-            // * Remove double quotes from name
             username.pop();
             username.remove(0);
+            
+            let mut res = Response::ok(format!("{}", new_post))?;
+            let headers = Response::headers_mut(&mut res);
+            let users = crate::check_user(&ctx).await?;
 
-            if req_cookie.len() > 0 {
-                let auth_resp =
-                    reqwest::get("https://ricky-division-score-chain.trycloudflare.com/verify")
+            if users.contains(&username) {
+                if req_cookie.len() > 0 {
+                    console_log!("This is the req cookie 🍪: {}", req_cookie);
+                    let client = reqwest::Client::new();
+                    let auth_resp = client
+                        .get("https://ricky-division-score-chain.trycloudflare.com/verify")
+                        .header(COOKIE, req_cookie)
+                        .send()
                         .await
                         .unwrap();
-                let resp_body = auth_resp.text().await.unwrap();
-                if resp_body != username {
-                    return Response::error("Could not verify user", 400);
+                    let resp_body = auth_resp.text().await.unwrap();
+                    console_log!("resp_body {}", resp_body);
+                    if resp_body != username {
+                        return Response::error("Could not verify user", 401);
+                    }
                 }
-            }
+            } else {
+                // * Add new user to users KV
+                crate::add_user(&username, &now, &ctx).await;
 
-            // * Get the set-cookie header from authorization server
-            let auth_resp = reqwest::get(format!(
-                "https://ricky-division-score-chain.trycloudflare.com/auth/{}",
-                username
-            ))
-            .await
-            .unwrap();
-            let auth_resp_headers = auth_resp.headers();
-            let set_cookie_header = auth_resp_headers
-                .get("set-cookie")
-                .unwrap()
-                .to_str()
+                // * Get the set-cookie header from authorization server
+                let auth_resp = reqwest::get(format!(
+                    "https://ricky-division-score-chain.trycloudflare.com/auth/{}",
+                    username
+                ))
+                .await
                 .unwrap();
+                let auth_resp_headers = auth_resp.headers();
+                let set_cookie_header = auth_resp_headers
+                    .get("set-cookie")
+                    .unwrap()
+                    .to_str()
+                    .unwrap();
+                Headers::set(headers, "Set-Cookie", set_cookie_header)?;
+            }
 
             let new_post_string = new_post.to_string();
 
@@ -177,9 +178,7 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
                 .execute()
                 .await?;
 
-            // * Set response
-            let mut res = Response::ok(format!("{}", new_post))?;
-            let headers = Response::headers_mut(&mut res);
+            // * Set response headers
             Headers::set(
                 headers,
                 "Access-Control-Allow-Origin",
@@ -192,7 +191,6 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
                 "GET,HEAD,POST,OPTIONS",
             )?;
             Headers::set(headers, "Access-Control-Allow-Headers", "Content-Type")?;
-            Headers::set(headers, "Set-Cookie", set_cookie_header)?;
             Ok(res)
         })
         .options_async("/posts", |_, _| async {
@@ -240,8 +238,6 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
             let keys = kv.list().execute().await?.keys;
             let mut users = vec![];
             for key in keys {
-                // let mut value = kv.get(&key.name).await.unwrap().unwrap().as_string();
-                // let j = json!(value);
                 users.push(key.name);
             }
             console_log!("{:#?}", users);
