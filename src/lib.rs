@@ -16,6 +16,21 @@ fn log_request(req: &Request) {
     );
 }
 
+async fn check_user(ctx: &RouteContext<()>) -> Result<Vec<String>> {
+    let kv = ctx.kv("users")?;
+    let keys = kv.list().execute().await?.keys;
+    let mut users = vec![];
+    for key in keys {
+        users.push(key.name);
+    }
+    Ok(users)
+}
+
+async fn add_user(username: &String, now: &String, ctx: &RouteContext<()>) {
+    let kv = ctx.kv("users").unwrap();
+    kv.put(&username, &now).unwrap().execute().await.unwrap();
+}
+
 #[event(fetch)]
 pub async fn main(req: Request, env: Env) -> Result<Response> {
     log_request(&req);
