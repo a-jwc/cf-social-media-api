@@ -60,12 +60,6 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
             )
         }
     }
-    struct Wrapper<Value>(Vec<Value>);
-    impl From<Vec<Value>> for Wrapper<Value> {
-        fn from(v: Vec<Value>) -> Self {
-            todo!()
-        }
-    }
 
     // Add as many routes as your Worker needs! Each route will get a `Request` for handling HTTP
     // functionality and a `RouteContext` which you can use to  and get route parameters and
