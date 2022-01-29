@@ -1,4 +1,4 @@
-use chrono::{Datelike, Timelike, Utc};
+use chrono::Utc;
 use reqwest::header::COOKIE;
 use serde::*;
 use serde_json::{json, Value};
@@ -92,7 +92,7 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
             let version = ctx.var("WORKERS_RS_VERSION")?.to_string();
             Response::ok(version)
         })
-        .get_async("/posts", |mut req, ctx| async move {
+        .get_async("/posts", |_req, ctx| async move {
             let kv = ctx.kv("my-app-general_posts_preview")?;
             let keys = kv.list().execute().await?.keys;
             let mut posts: Vec<Value> = vec![];
