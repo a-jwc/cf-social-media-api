@@ -11,6 +11,17 @@ kv_namespaces = [
 
 [vars]
 WORKERS_RS_VERSION = "0.0.7"
+AUTH_SERVER_URL = "https://painful-male-charleston-focusing.trycloudflare.com"
+FRONTEND_URL = "https://cf-social-media-frontend.pages.dev"
+
+[env.production]
+name = "workers-rust-production"
+[env.production.vars]
+
+[env.development]
+name = "workers-rust-dev"
+[env.development.vars]
+FRONTEND_URL = "http://localhost:3000"
 
 [build]
 command = "cargo install -q worker-build && worker-build --release" # required

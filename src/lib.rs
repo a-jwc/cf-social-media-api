@@ -81,7 +81,7 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
             Headers::set(
                 headers,
                 "Access-Control-Allow-Origin",
-                "https://cf-social-media-frontend.pages.dev",
+                &ctx.var("FRONTEND_URL")?.to_string(),
             )?;
             Headers::set(headers, "Access-Control-Allow-Credentials", "true")?;
             Headers::set(headers, "transfer-encoding", "chunked")?;
@@ -103,7 +103,7 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
             };
             username.pop();
             username.remove(0);
-            
+
             let mut res = Response::ok(format!("{}", new_post))?;
             let headers = Response::headers_mut(&mut res);
             let users = crate::check_user(&ctx).await?;
@@ -113,7 +113,10 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
                     console_log!("This is the req cookie 🍪: {}", req_cookie);
                     let client = reqwest::Client::new();
                     let auth_resp = client
-                        .get("https://tracked-specialized-webcam-mounts.trycloudflare.com/verify")
+                        .get(format!(
+                            "{}/verify",
+                            ctx.var("AUTH_SERVER_URL")?.to_string()
+                        ))
                         .header(COOKIE, req_cookie)
                         .send()
                         .await
@@ -130,7 +133,8 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
 
                 // * Get the set-cookie header from authorization server
                 let auth_resp = reqwest::get(format!(
-                    "https://tracked-specialized-webcam-mounts.trycloudflare.com/auth/{}",
+                    "{}/auth/{}",
+                    ctx.var("AUTH_SERVER_URL")?.to_string(),
                     username
                 ))
                 .await
@@ -156,7 +160,7 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
             Headers::set(
                 headers,
                 "Access-Control-Allow-Origin",
-                "https://cf-social-media-frontend.pages.dev",
+                &ctx.var("FRONTEND_URL")?.to_string(),
             )?;
             Headers::set(headers, "Access-Control-Allow-Credentials", "true")?;
             Headers::set(
@@ -167,13 +171,13 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
             Headers::set(headers, "Access-Control-Allow-Headers", "Content-Type")?;
             Ok(res)
         })
-        .options_async("/posts", |_, _| async {
+        .options_async("/posts", |_, ctx| async move {
             let mut res = Response::ok("success")?;
             let headers = Response::headers_mut(&mut res);
             Headers::set(
                 headers,
                 "Access-Control-Allow-Origin",
-                "https://cf-social-media-frontend.pages.dev",
+                &ctx.var("FRONTEND_URL")?.to_string(),
             )?;
             Ok(res)
         })
@@ -197,7 +201,7 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
             Headers::set(
                 headers,
                 "Access-Control-Allow-Origin",
-                "https://cf-social-media-frontend.pages.dev",
+                &ctx.var("FRONTEND_URL")?.to_string(),
             )?;
             Headers::set(
                 headers,
