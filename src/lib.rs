@@ -67,15 +67,31 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
     router
         .get("/", |_, _| Response::ok("Hello from Workers!"))
         .get_async("/posts", |_req, ctx| async move {
+            // * Get the kv
             let kv = ctx.kv("my-app-general_posts_preview")?;
+
+            // * Get a list of keys
             let keys = kv.list().execute().await?.keys;
             let mut posts: Vec<Value> = vec![];
+
             for key in keys {
-                let value = kv.get(&key.name).await.unwrap().unwrap().as_string();
-                let j = json!(value);
-                posts.push(j);
+                // let value = kv.get(&key.name).await.unwrap().unwrap().as_string();
+                let value = match kv.get(&key.name).await {
+                    Ok(r) => match r {
+                        Some(val) => val.as_string(),
+                        None => return Response::error("No value found for key", 502),
+                    },
+                    Err(e) => {
+                        return Response::error(format!("Could not get value for key. Error: {}", e), 502)
+                    }
+                };
+                
+                // * Convert string value to a json and push on to posts vector
+                let value_json = json!(value);
+                posts.push(value_json);
             }
-            console_log!("{:#?}", posts);
+            
+            // * Create OK response and set response headers
             let mut res = Response::from_json(&posts)?;
             let headers = Response::headers_mut(&mut res);
             Headers::set(
@@ -90,29 +106,37 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
             Ok(res)
         })
         .post_async("/posts", |mut req, ctx| async move {
+            // * Get the new post
             let mut new_post: Value = req.json::<serde_json::Value>().await?;
+
+            // * Get the current time and set it in the post to the "time" field
             let now = Utc::now().to_rfc3339().to_string();
-            let req_cookie = req.headers().get("Cookie")?.unwrap_or("".to_string());
-            let name_not_found = "".to_string();
             *new_post.get_mut("time").unwrap() = serde_json::Value::String(now.clone());
+
+            // * Get the cookie header if present, otherwise set the cookie to empty string
+            let req_cookie = req.headers().get("Cookie")?.unwrap_or("".to_string());
 
             // * Get username and remove double quotes from name
             let mut username = match new_post.get("username") {
                 Some(n) => n.to_string(),
-                None => name_not_found.to_string(),
+                None => return Response::error("No username present in new post", 400),
             };
             username.pop();
             username.remove(0);
 
+            // * Create the response and get the headers
             let mut res = Response::ok(format!("{}", new_post))?;
             let headers = Response::headers_mut(&mut res);
+
+            // * Get a vector of the users from users namespace
             let users = crate::check_user(&ctx).await?;
 
+            // * Check if this is an existing user
             if users.contains(&username) {
                 if req_cookie.len() > 0 {
-                    console_log!("This is the req cookie 🍪: {}", req_cookie);
+                    // * Send a request to the authentication server at endpoint /verify
                     let client = reqwest::Client::new();
-                    let auth_resp = client
+                    let auth_resp = match client
                         .get(format!(
                             "{}/verify",
                             ctx.var("AUTH_SERVER_URL")?.to_string()
@@ -120,9 +144,28 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
                         .header(COOKIE, req_cookie)
                         .send()
                         .await
-                        .unwrap();
-                    let resp_body = auth_resp.text().await.unwrap();
-                    console_log!("resp_body {}", resp_body);
+                    {
+                        Ok(r) => r,
+                        Err(e) => {
+                            return Response::error(
+                                format!("Could not verify user. Error: {}", e),
+                                401,
+                            )
+                        }
+                    };
+
+                    let resp_body = match auth_resp.text().await {
+                        Ok(r) => r,
+                        Err(e) => {
+                            return Response::error(
+                                format!(
+                                "Could not get response body from authentication server. Error: {}",
+                                e
+                            ),
+                                502,
+                            )
+                        }
+                    };
                     if resp_body != username {
                         return Response::error("Could not verify user", 401);
                     }
@@ -131,7 +174,7 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
                 // * Add new user to users KV
                 crate::add_user(&username, &now, &ctx).await;
 
-                // * Get the set-cookie header from authorization server
+                // * Get the set-cookie header from authorization server and forward it to the response
                 let auth_resp = reqwest::get(format!(
                     "{}/auth/{}",
                     ctx.var("AUTH_SERVER_URL")?.to_string(),
@@ -172,6 +215,7 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
             Ok(res)
         })
         .options_async("/posts", |_, ctx| async move {
+            // * For preflight response
             let mut res = Response::ok("success")?;
             let headers = Response::headers_mut(&mut res);
             Headers::set(
@@ -182,21 +226,30 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
             Ok(res)
         })
         .post_async("/updatelikes", |mut req, ctx| async move {
-            // get value <username>-<time>
-            let mut new_post: Value = req.json::<serde_json::Value>().await?;
-            let kv = ctx.kv("my-app-general_posts_preview")?;
-            let new_post_obj = new_post.as_object_mut().unwrap();
-            let mut username = new_post_obj.get("username").unwrap().to_string();
+            // * Get the post to like and conver to a mutable object
+            let mut post_to_like: Value = req.json::<serde_json::Value>().await?;
+            let post_obj = post_to_like.as_object_mut().unwrap();
+
+            // * Get username and time and remove double quotes
+            let mut username = post_obj.get("username").unwrap().to_string();
             username.pop();
             username.remove(0);
-            let mut time = new_post_obj.get("time").unwrap().to_string();
+
+            let mut time = post_obj.get("time").unwrap().to_string();
             time.pop();
             time.remove(0);
+
+            // * Reconstruct the key to find th epost in the kv
             let key = time + "-" + &username;
+
+            // * Replace the previous post with the updated post which contains an additional like/vote
+            let kv = ctx.kv("my-app-general_posts_preview")?;
             kv.delete(&key).await?;
-            let new_post_string = new_post.to_string();
+            let new_post_string = post_to_like.to_string();
             kv.put(&key, new_post_string)?.execute().await?;
-            let mut res = Response::ok(format!("{}", new_post))?;
+
+            // * Create OK response and set response headers
+            let mut res = Response::ok(format!("{}", post_to_like))?;
             let headers = Response::headers_mut(&mut res);
             Headers::set(
                 headers,
