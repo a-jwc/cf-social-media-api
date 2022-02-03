@@ -48,6 +48,13 @@ fn set_post_headers(ctx: RouteContext<()>, headers: &mut Headers) -> Result<()> 
     Ok(())
 }
 
+fn remove_quotes(item: String) -> String{
+  let mut item_copy = item.clone();
+  item_copy.pop();
+  item_copy.remove(0);
+  item_copy
+}
+
 #[event(fetch)]
 pub async fn main(req: Request, env: Env) -> Result<Response> {
     log_request(&req);
@@ -136,12 +143,11 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
             let req_cookie = req.headers().get("Cookie")?.unwrap_or("".to_string());
 
             // * Get username and remove double quotes from name
-            let mut username = match new_post.get("username") {
+            let username = match new_post.get("username") {
                 Some(n) => n.to_string(),
                 None => return Response::error("No username present in new post", 400),
             };
-            username.pop();
-            username.remove(0);
+            let username = crate::remove_quotes(username);
 
             // * Create the response and get the headers
             let mut res = Response::ok(format!("{}", new_post))?;
@@ -220,18 +226,6 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
 
             // * Set response headers
             let _ = crate::set_post_headers(ctx, headers);
-            // Headers::set(
-            //     headers,
-            //     "Access-Control-Allow-Origin",
-            //     &ctx.var("FRONTEND_URL")?.to_string(),
-            // )?;
-            // Headers::set(headers, "Access-Control-Allow-Credentials", "true")?;
-            // Headers::set(
-            //     headers,
-            //     "Access-Control-Allow-Methods",
-            //     "GET,HEAD,POST,OPTIONS",
-            // )?;
-            // Headers::set(headers, "Access-Control-Allow-Headers", "Content-Type")?;
             Ok(res)
         })
         .options_async("/posts", |_, ctx| async move {
@@ -272,18 +266,6 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
             let mut res = Response::ok(format!("{}", post_to_like))?;
             let headers = Response::headers_mut(&mut res);
             let _ = crate::set_post_headers(ctx, headers);
-
-            // Headers::set(
-            //     headers,
-            //     "Access-Control-Allow-Origin",
-            //     &ctx.var("FRONTEND_URL")?.to_string(),
-            // )?;
-            // Headers::set(
-            //     headers,
-            //     "Access-Control-Allow-Methods",
-            //     "GET,HEAD,POST,OPTIONS",
-            // )?;
-            // Headers::set(headers, "Access-Control-Allow-Headers", "Content-Type")?;
             Ok(res)
         })
         .run(req, env)
