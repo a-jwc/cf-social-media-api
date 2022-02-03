@@ -32,6 +32,22 @@ async fn add_user(username: &String, now: &String, ctx: &RouteContext<()>) {
     kv.put(&username, &now).unwrap().execute().await.unwrap();
 }
 
+fn set_post_headers(ctx: RouteContext<()>, headers: &mut Headers) -> Result<()> {
+    Headers::set(
+        headers,
+        "Access-Control-Allow-Origin",
+        &ctx.var("FRONTEND_URL")?.to_string(),
+    )?;
+    Headers::set(headers, "Access-Control-Allow-Credentials", "true")?;
+    Headers::set(
+        headers,
+        "Access-Control-Allow-Methods",
+        "GET,HEAD,POST,OPTIONS",
+    )?;
+    Headers::set(headers, "Access-Control-Allow-Headers", "Content-Type")?;
+    Ok(())
+}
+
 #[event(fetch)]
 pub async fn main(req: Request, env: Env) -> Result<Response> {
     log_request(&req);
@@ -82,15 +98,18 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
                         None => return Response::error("No value found for key", 502),
                     },
                     Err(e) => {
-                        return Response::error(format!("Could not get value for key. Error: {}", e), 502)
+                        return Response::error(
+                            format!("Could not get value for key. Error: {}", e),
+                            502,
+                        )
                     }
                 };
-                
+
                 // * Convert string value to a json and push on to posts vector
                 let value_json = json!(value);
                 posts.push(value_json);
             }
-            
+
             // * Create OK response and set response headers
             let mut res = Response::from_json(&posts)?;
             let headers = Response::headers_mut(&mut res);
@@ -200,18 +219,19 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
                 .await?;
 
             // * Set response headers
-            Headers::set(
-                headers,
-                "Access-Control-Allow-Origin",
-                &ctx.var("FRONTEND_URL")?.to_string(),
-            )?;
-            Headers::set(headers, "Access-Control-Allow-Credentials", "true")?;
-            Headers::set(
-                headers,
-                "Access-Control-Allow-Methods",
-                "GET,HEAD,POST,OPTIONS",
-            )?;
-            Headers::set(headers, "Access-Control-Allow-Headers", "Content-Type")?;
+            let _ = crate::set_post_headers(ctx, headers);
+            // Headers::set(
+            //     headers,
+            //     "Access-Control-Allow-Origin",
+            //     &ctx.var("FRONTEND_URL")?.to_string(),
+            // )?;
+            // Headers::set(headers, "Access-Control-Allow-Credentials", "true")?;
+            // Headers::set(
+            //     headers,
+            //     "Access-Control-Allow-Methods",
+            //     "GET,HEAD,POST,OPTIONS",
+            // )?;
+            // Headers::set(headers, "Access-Control-Allow-Headers", "Content-Type")?;
             Ok(res)
         })
         .options_async("/posts", |_, ctx| async move {
@@ -251,17 +271,19 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
             // * Create OK response and set response headers
             let mut res = Response::ok(format!("{}", post_to_like))?;
             let headers = Response::headers_mut(&mut res);
-            Headers::set(
-                headers,
-                "Access-Control-Allow-Origin",
-                &ctx.var("FRONTEND_URL")?.to_string(),
-            )?;
-            Headers::set(
-                headers,
-                "Access-Control-Allow-Methods",
-                "GET,HEAD,POST,OPTIONS",
-            )?;
-            Headers::set(headers, "Access-Control-Allow-Headers", "Content-Type")?;
+            let _ = crate::set_post_headers(ctx, headers);
+
+            // Headers::set(
+            //     headers,
+            //     "Access-Control-Allow-Origin",
+            //     &ctx.var("FRONTEND_URL")?.to_string(),
+            // )?;
+            // Headers::set(
+            //     headers,
+            //     "Access-Control-Allow-Methods",
+            //     "GET,HEAD,POST,OPTIONS",
+            // )?;
+            // Headers::set(headers, "Access-Control-Allow-Headers", "Content-Type")?;
             Ok(res)
         })
         .run(req, env)
