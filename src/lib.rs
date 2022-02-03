@@ -48,11 +48,11 @@ fn set_post_headers(ctx: RouteContext<()>, headers: &mut Headers) -> Result<()> 
     Ok(())
 }
 
-fn remove_quotes(item: String) -> String{
-  let mut item_copy = item.clone();
-  item_copy.pop();
-  item_copy.remove(0);
-  item_copy
+fn remove_quotes(item: String) -> String {
+    let mut item_copy = item.clone();
+    item_copy.pop();
+    item_copy.remove(0);
+    item_copy
 }
 
 #[event(fetch)]
@@ -245,13 +245,8 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
             let post_obj = post_to_like.as_object_mut().unwrap();
 
             // * Get username and time and remove double quotes
-            let mut username = post_obj.get("username").unwrap().to_string();
-            username.pop();
-            username.remove(0);
-
-            let mut time = post_obj.get("time").unwrap().to_string();
-            time.pop();
-            time.remove(0);
+            let username = crate::remove_quotes(post_obj.get("username").unwrap().to_string());
+            let time = crate::remove_quotes(post_obj.get("time").unwrap().to_string());
 
             // * Reconstruct the key to find th epost in the kv
             let key = time + "-" + &username;
